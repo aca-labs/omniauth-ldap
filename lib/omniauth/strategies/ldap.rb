@@ -35,16 +35,22 @@ module OmniAuth
       end
 
       def callback_phase
-        @adaptor = OmniAuth::LDAP::Adaptor.new @options
-
         return fail!(:missing_credentials) if missing_credentials?
+        
+        bases = Array(@options[:base])
+
         begin
-          @ldap_user_info = @adaptor.bind_as(:filter => filter(@adaptor), :size => 1, :password => request['password'])
+          loop do
+            @adaptor = OmniAuth::LDAP::Adaptor.new @options.merge({base: bases.pop})
+            @ldap_user_info = @adaptor.bind_as(:filter => filter(@adaptor), :size => 1, :password => request['password'])
+            break if @ldap_user_info || bases.length == 0
+          end
           return fail!(:invalid_credentials) if !@ldap_user_info
 
           @user_info = self.class.map_user(@@config, @ldap_user_info)
           super
         rescue Exception => e
+          retry if bases.length > 0
           return fail!(:ldap_error, e)
         end
       end
